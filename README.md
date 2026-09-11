@@ -2,19 +2,19 @@
 
 Experimental Windows NT kernel compatibility layer for Linux.
 
-Description
+## Description
 
-ntlinux is a project aimed at running Windows kernel-mode components on Linux by providing a compatibility layer for Windows NT kernel interfaces and driver execution.
+`ntlinux` is a project aimed at running Windows kernel-mode components on Linux by providing a compatibility layer for Windows NT kernel interfaces and driver execution.
 
 The long-term goal is to allow supported Windows applications and games that depend on Windows kernel drivers to work on Linux without requiring a Windows installation.
 
 The project is currently in the analysis stage. The first part focuses on analyzing Windows PE/COFF kernel drivers and understanding the NT kernel APIs they use.
 
-Goal
+## Goal
 
 The intended architecture:
 
-
+```text
 Windows Application / Game
           |
           v
@@ -36,9 +36,15 @@ The final system should be able to:
 * Translate NT kernel operations to Linux equivalents
 * Support Windows kernel-mode components without modifying the original driver
 
-Current Features
+## Current Features
 
-`ntinspect` currently supports:
+### ntinspect
+
+`ntinspect` is a static analysis and reverse-engineering tool for Windows PE images, including kernel-mode `.sys` drivers.
+
+It is currently used to analyze the internal structure, dependencies, code and NT API usage of Windows binaries as part of the development of `ntlinux`.
+
+Current capabilities:
 
 * DOS header parsing
 * PE header parsing
@@ -56,9 +62,12 @@ Current Features
 * x86-64 disassembly using Capstone
 * CALL instruction detection
 * Direct CALL target calculation
+* Direct CALL target validation
 * Indirect CALL detection
 
-Analysis Pipeline
+`ntinspect` does not execute Windows drivers. It currently operates entirely on PE images through static analysis.
+
+## Analysis Pipeline
 
 ```text
 Windows .sys driver
@@ -98,9 +107,9 @@ Windows .sys driver
  Linux kernel
 ```
 
-TODO
+## TODO
 
-PE Analysis
+### PE Analysis
 
 * [x] DOS header
 * [x] PE header
@@ -111,13 +120,13 @@ PE Analysis
 * [x] Relocation parsing
 * [x] UTF-16LE string detection
 
-Code Analysis
+### Code Analysis
 
 * [x] x86-64 disassembly
 * [x] Executable section detection
 * [x] CALL instruction detection
 * [x] Direct CALL target calculation
-* [ ] Direct CALL target validation
+* [x] Direct CALL target validation
 * [ ] RIP-relative indirect CALL resolution
 * [ ] Import/thunk CALL resolution
 * [ ] Function discovery
@@ -126,7 +135,7 @@ Code Analysis
 * [ ] Control-flow graph
 * [ ] Call graph
 
-NT ABI
+### NT ABI
 
 * [ ] NT status codes
 * [ ] NT data types
@@ -142,7 +151,7 @@ NT ABI
 * [ ] Power management
 * [ ] WMI / ETW
 
-Driver Runtime
+### Driver Runtime
 
 * [ ] Windows driver loader
 * [ ] PE image loading
@@ -154,7 +163,7 @@ Driver Runtime
 * [ ] NT-to-Linux API mapping
 * [ ] Driver isolation
 
-Compatibility
+### Compatibility
 
 * [ ] Test with simple Windows drivers
 * [ ] Test with filesystem drivers
@@ -162,13 +171,19 @@ Compatibility
 * [ ] Test compatibility with real applications
 * [ ] Test compatibility with games
 
-Project Status
+## Project Status
 
-The project is currently in early development.
+The project is currently in early development and is **very much a work in progress**.
 
-At the moment, `ntlinux` does not execute Windows kernel drivers. The current implementation is a static PE and Windows driver analysis tool.
+`ntinspect` is currently a static analysis and reverse-engineering tool for Windows PE images, including kernel-mode `.sys` drivers.
 
-Build
+It is used to study the structure, dependencies, code and NT API usage of Windows binaries before implementing the actual compatibility layer.
+
+At this stage, `ntlinux` does **not** execute Windows kernel drivers.
+
+`ntinspect` is currently **very raw and experimental**, and its analysis capabilities are still under active development.
+
+## Build
 
 Dependencies:
 
@@ -178,27 +193,29 @@ Dependencies:
 
 Build:
 
-
+```bash
 make
 ```
 
 Clean:
 
-
+```bash
 make clean
 ```
 
 Rebuild:
 
+```bash
 make rebuild
 ```
 
-Usage
+## Usage
 
+```bash
 ./ntinspect tests/exfat.sys
 ```
 
-Project Structure
+## Project Structure
 
 
 ntlinux/
@@ -211,6 +228,7 @@ ntlinux/
 ├── README.md
 └── .gitignore
 ```
-License
+
+## License
 
 ntlinux is licensed under the GNU General Public License v3.0.
