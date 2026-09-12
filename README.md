@@ -1,18 +1,19 @@
-ntlinux
+# ntlinux
 
 Experimental Windows NT kernel compatibility layer for Linux.
 
-Description
+## Description
 
-`ntlinux` is a project aimed at running Windows kernel-mode components on Linux by providing a compatibility layer for Windows NT kernel interfaces and driver execution.
+`ntlinux` is an experimental project exploring whether selected Windows
+kernel-mode components (`.sys` drivers) can be analyzed and eventually
+executed through a native Linux compatibility environment without running
+a complete Windows kernel.
 
-The long-term goal is to allow supported Windows applications and games that depend on Windows kernel drivers to work on Linux without requiring a Windows installation.
+The long-term goal is to provide the NT kernel interfaces and semantics
+required by supported Windows kernel-mode components.
 
-The project is currently in the analysis stage. The first part focuses on analyzing Windows PE/COFF kernel drivers and understanding the NT kernel APIs they use.
-
-Goal
-
-The intended architecture:
+The project is currently in the **static analysis and reverse-engineering
+stage**.
 
 ```text
 Windows Application / Game
@@ -24,208 +25,315 @@ Windows Application / Game
        ntlinux
           |
           v
-     Linux kernel
-```
+      Linux kernel
+Current Status
 
-The final system should be able to:
+The project does not execute Windows kernel drivers yet.
 
-* Load Windows `.sys` drivers
-* Resolve PE imports and relocations
-* Provide required NT kernel APIs
-* Provide Windows driver objects and I/O mechanisms
-* Translate NT kernel operations to Linux equivalents
-* Support Windows kernel-mode components without modifying the original driver
-
-Current Features
+The current focus is ntinspect, a PE/COFF and Windows driver analysis tool
+used to investigate the structure, dependencies and code of .sys files.
 
 ntinspect
 
-`ntinspect` is a static analysis and reverse-engineering tool for Windows PE images, including kernel-mode `.sys` drivers.
-
-It is currently used to analyze the internal structure, dependencies, code and NT API usage of Windows binaries as part of the development of `ntlinux`.
+ntinspect analyzes Windows PE images, including kernel-mode drivers.
 
 Current capabilities:
 
-* DOS header parsing
-* PE header parsing
-* COFF header parsing
-* PE32 and PE32+ detection
-* x86-64 architecture detection
-* PE section parsing
-* Import table parsing
-* Export table parsing
-* Base relocation parsing
-* UTF-16LE string detection
-* Windows driver profile analysis
-* NT kernel API import classification
-* Executable section detection
-* x86-64 disassembly using Capstone
-* CALL instruction detection
-* Direct CALL target calculation
-* Direct CALL target validation
-* Indirect CALL detection
+DOS / MZ header parsing
+PE signature validation
+COFF header parsing
+PE32 / PE32+ detection
+x86-64 architecture detection
+PE section parsing
+Import table parsing
+Export table parsing
+Base relocation parsing
+UTF-16LE string scanning
+Windows driver profile analysis
+NT kernel API import classification
+x86-64 disassembly using Capstone
+CALL instruction discovery
+Direct CALL target calculation
+Direct CALL target validation
+Indirect CALL detection
+x64 .pdata runtime-function parsing
+Runtime function range detection
+CALL-to-function association
+Example
 
-`ntinspect` does not execute Windows drivers. It currently operates entirely on PE images through static analysis.
+Basic analysis:
 
+./ntinspect tests/exfat.sys
+
+Analyze imports:
+
+./ntinspect tests/exfat.sys --imports
+
+Analyze runtime functions:
+
+./ntinspect tests/exfat.sys --functions
+
+Analyze CALL instructions:
+
+./ntinspect tests/exfat.sys --calls --limit 20
+
+Enable all analysis modules:
+
+./ntinspect tests/exfat.sys --all --limit 20
 Analysis Pipeline
 
-```text
-Windows .sys driver
-        |
-        v
-    PE parser
-        |
-        +-- Headers
-        +-- Sections
-        +-- Imports
-        +-- Exports
-        +-- Relocations
-        +-- Strings
-        |
-        v
-    ABI analysis
-        |
-        v
+The current analysis pipeline is:
+
+PE / .sys file
+      |
+      v
+   PE parser
+      |
+      +-- sections
+      +-- imports
+      +-- exports
+      +-- relocations
+      +-- strings
+      +-- driver profile
+      |
+      v
+   NT ABI analysis
+      |
+      v
+   .pdata parsing
+      |
+      v
+ runtime functions
+      |
+      v
  x86-64 disassembly
-        |
-        v
+      |
+      v
    CALL analysis
-        |
-        v
- Function discovery
-        |
-        v
- Control-flow analysis
-        |
-        v
-   NT ABI model
-        |
-        v
- Driver runtime
-        |
-        v
- Linux kernel
-```
+      |
+      v
+ function relationships
+      |
+      v
+      IAT
+      |
+      v
+ imported NT APIs
+Runtime Function Analysis
 
-TODO
+On x86-64 Windows PE images, .pdata contains runtime-function information.
 
-PE Analysis
+ntinspect reads the runtime-function table and extracts:
 
-* [x] DOS header
-* [x] PE header
-* [x] COFF header
-* [x] Section parsing
-* [x] Import parsing
-* [x] Export parsing
-* [x] Relocation parsing
-* [x] UTF-16LE string detection
+function start RVA
+function end RVA
+unwind information
+function size
 
-Code Analysis
+These ranges are then used by CALL analysis so that executable code can be
+analyzed within known function boundaries instead of blindly disassembling
+an entire executable section.
 
-* [x] x86-64 disassembly
-* [x] Executable section detection
-* [x] CALL instruction detection
-* [x] Direct CALL target calculation
-* [x] Direct CALL target validation
-* [ ] RIP-relative indirect CALL resolution
-* [ ] Import/thunk CALL resolution
-* [ ] Function discovery
-* [ ] `.pdata` / `RUNTIME_FUNCTION` parsing
-* [ ] Basic block detection
-* [ ] Control-flow graph
-* [ ] Call graph
+For example:
 
-NT ABI
+Function 1
+0x000010AC - 0x000014E1
 
-* [ ] NT status codes
-* [ ] NT data types
-* [ ] Object Manager
-* [ ] Memory Manager
-* [ ] I/O Manager
-* [ ] IRP model
-* [ ] Synchronization primitives
-* [ ] Registry interface
-* [ ] Process and thread interfaces
-* [ ] Security interfaces
-* [ ] Plug and Play
-* [ ] Power management
-* [ ] WMI / ETW
+    0x000014BB
+        CALL -> 0x00001008
+CALL Analysis
 
-Driver Runtime
+ntinspect currently distinguishes:
 
-* [ ] Windows driver loader
-* [ ] PE image loading
-* [ ] Import resolution
-* [ ] Relocation handling
-* [ ] Driver initialization
-* [ ] Driver/device objects
-* [ ] IRP dispatch
-* [ ] NT-to-Linux API mapping
-* [ ] Driver isolation
+Direct CALL
+E8 xx xx xx xx
 
-Compatibility
+The target is calculated from the x86-64 relative displacement.
 
-* [ ] Test with simple Windows drivers
-* [ ] Test with filesystem drivers
-* [ ] Test with user-mode/kernel-mode interaction
-* [ ] Test compatibility with real applications
-* [ ] Test compatibility with games
+Example:
 
-Project Status
+0x000014BB  CALL -> 0x00001008 [direct] [exec]
+Indirect CALL
 
-The project is currently in early development and is **very much a work in progress**.
+Examples include:
 
-`ntinspect` is currently a static analysis and reverse-engineering tool for Windows PE images, including kernel-mode `.sys` drivers.
+call rax
+call [rax]
+call qword ptr [rip + disp32]
 
-It is used to study the structure, dependencies, code and NT API usage of Windows binaries before implementing the actual compatibility layer.
+These are currently reported as indirect calls.
 
-At this stage, `ntlinux` does **not** execute Windows kernel drivers.
+Future analysis will resolve RIP-relative indirect calls through the PE
+Import Address Table (IAT).
 
-`ntinspect` is currently **very raw and experimental**, and its analysis capabilities are still under active development.
+Target output:
 
-Build
+0x00001094  CALL -> ntoskrnl.exe!IofCallDriver
+Project Structure
+ntlinux/
+├── src/
+│   ├── ntinspect.c
+│   ├── pe_utils.c
+│   ├── pe_sections.c
+│   ├── pe_imports.c
+│   ├── pe_exports.c
+│   ├── pe_relocs.c
+│   ├── pe_strings.c
+│   ├── pe_driver.c
+│   ├── pe_abi.c
+│   ├── pe_functions.c
+│   ├── disasm_x64.c
+│   └── calls.c
+│
+├── include/
+│   ├── pe.h
+│   ├── pe_utils.h
+│   ├── pe_sections.h
+│   ├── pe_imports.h
+│   ├── pe_exports.h
+│   ├── pe_relocs.h
+│   ├── pe_strings.h
+│   ├── pe_driver.h
+│   ├── pe_abi.h
+│   ├── pe_functions.h
+│   ├── disasm_x64.h
+│   └── calls.h
+│
+├── tests/
+│   ├── exfat.sys
+│   └── battc.sys
+│
+├── docs/
+├── Makefile
+├── README.md
+└── TODO.md
+Building
 
 Dependencies:
 
-* GCC
-* GNU Make
-* Capstone
+GCC
+GNU Make
+Capstone development library
 
 Build:
 
 make
-```
 
 Clean:
 
-
 make clean
-```
 
 Rebuild:
 
 make rebuild
-```
+Development Roadmap
+Phase 1 — PE Analysis
+ DOS header parser
+ PE header parser
+ Section parser
+ Import parser
+ Export parser
+ Relocation parser
+ String scanner
+ Driver profile
+ NT ABI import classification
+Phase 2 — Code Analysis
+ x86-64 disassembly
+ Executable section detection
+ CALL discovery
+ Direct CALL target calculation
+ Direct CALL target validation
+ .pdata runtime-function parsing
+ CALL-to-function association
+ IAT-aware indirect CALL resolution
+ Function name discovery
+ Basic block detection
+ Control-flow graph
+ Function call graph
+ Cross-reference analysis
+Phase 3 — NT ABI Model
+ NT types
+ NT status codes
+ Object manager model
+ Memory manager model
+ I/O manager model
+ IRP model
+ Synchronization primitives
+ Registry model
+ Process/thread model
+ Security model
+ PnP model
+ Power management model
+ WMI / ETW interfaces
+Phase 4 — Driver Runtime
+ PE image loader
+ Relocation application
+ Import resolution
+ Driver initialization model
+ Driver object model
+ Device object model
+ IRP dispatch
+ NT-to-Linux kernel mapping
+ Driver isolation
+Phase 5 — Compatibility Testing
+simple test driver
+        |
+        v
+toy WDM driver
+        |
+        v
+filesystem driver
+        |
+        v
+security-related driver
+        |
+        v
+complex third-party driver
 
-Usage
+Only drivers compatible with the implemented NT ABI should be considered for
+runtime testing.
 
+Design Principles
+No Windows kernel
 
-./ntinspect tests/exfat.sys
-```
+ntlinux aims to implement the NT interfaces and semantics required by
+supported drivers instead of embedding or booting a complete Windows kernel.
 
-Project Structure
+Linux-native backend
 
-```text
-ntlinux/
-├── src/
-├── include/
-├── tests/
-├── docs/
-├── Makefile
-├── LICENSE
-├── README.md
-└── .gitignore
-```
+Linux remains the host kernel.
+
+NT concepts are mapped onto Linux primitives where practical.
+
+Analysis before execution
+
+A .sys file should be statically analyzed before any attempt at runtime
+loading or execution.
+
+Isolation
+
+Kernel-mode code is inherently privileged. Any future runtime must prioritize
+validation, isolation and controlled execution.
+
+Current Limitations
+
+ntlinux is currently an analysis project.
+
+It cannot execute arbitrary Windows .sys drivers.
+
+Static analysis also cannot perfectly recover all program behavior because
+optimized native code may contain indirect control flow, embedded data,
+runtime-generated addresses and other constructs that require deeper analysis.
+
+Why?
+
+Modern Windows software can depend on kernel-mode components.
+
+A compatibility environment implementing only Win32/user-mode interfaces
+cannot provide compatibility with kernel-mode software.
+
+ntlinux explores what would be required to bridge selected Windows NT
+kernel interfaces to a Linux-native implementation.
 
 License
 
