@@ -15,7 +15,8 @@ SRC = \
 	src/pe_driver.c \
 	src/pe_abi.c \
 	src/disasm_x64.c \
-	src/calls.c
+	src/calls.c \
+	src/pe_functions.c \
 
 OBJ = $(SRC:.c=.o)
 

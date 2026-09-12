@@ -6,6 +6,7 @@
 
 void pe_find_calls(FILE *file,
                    const COFFHeader *coff,
-                   uint32_t pe_offset);
+                   uint32_t pe_offset,
+                   size_t limit);
 
 #endif
