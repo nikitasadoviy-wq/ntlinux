@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include <capstone/capstone.h>
 
 #include "pe.h"
+#include "pe_functions.h"
+#include "pe_utils.h"
 #include "calls.h"
 
 
@@ -19,15 +20,21 @@ static int is_executable_rva(const SectionHeader *sections,
                              uint16_t section_count,
                              uint64_t rva)
 {
-    for (uint16_t i = 0; i < section_count; i++) {
+    for (uint16_t i = 0;
+         i < section_count;
+         i++) {
 
-        uint32_t start = sections[i].virtual_address;
-        uint32_t size = sections[i].virtual_size;
+        uint32_t start =
+            sections[i].virtual_address;
+
+        uint32_t size =
+            sections[i].virtual_size;
 
         if (sections[i].size_of_raw_data > size)
             size = sections[i].size_of_raw_data;
 
-        uint64_t end = (uint64_t)start + size;
+        uint64_t end =
+            (uint64_t)start + size;
 
         if (rva >= start && rva < end)
             return is_executable_section(&sections[i]);
@@ -57,6 +64,20 @@ void pe_find_calls(FILE *file,
               CS_OPT_DETAIL,
               CS_OPT_OFF);
 
+    FunctionTable functions;
+
+    if (!pe_load_functions(file,
+                           coff,
+                           pe_offset,
+                           &functions)) {
+
+        fprintf(stderr,
+                "Error: failed to load .pdata functions\n");
+
+        cs_close(&handle);
+        return;
+    }
+
     long section_offset =
         (long)pe_offset +
         4L +
@@ -64,8 +85,11 @@ void pe_find_calls(FILE *file,
         (long)coff->size_of_optional_header;
 
     if (fseek(file, section_offset, SEEK_SET) != 0) {
+
         fprintf(stderr,
                 "Error: failed to seek to section headers\n");
+
+        pe_free_functions(&functions);
         cs_close(&handle);
         return;
     }
@@ -75,8 +99,11 @@ void pe_find_calls(FILE *file,
                sizeof(SectionHeader));
 
     if (!sections) {
+
         fprintf(stderr,
                 "Error: failed to allocate section table\n");
+
+        pe_free_functions(&functions);
         cs_close(&handle);
         return;
     }
@@ -90,6 +117,7 @@ void pe_find_calls(FILE *file,
                 "Error: failed to read section headers\n");
 
         free(sections);
+        pe_free_functions(&functions);
         cs_close(&handle);
         return;
     }
@@ -103,46 +131,70 @@ void pe_find_calls(FILE *file,
 
     printf("\n[+] CALL Analysis:\n");
 
-    for (uint16_t section_index = 0;
-         section_index < coff->number_of_sections;
-         section_index++) {
+    for (size_t function_index = 0;
+         function_index < functions.count;
+         function_index++) {
 
-        SectionHeader *section =
-            &sections[section_index];
+        RuntimeFunction *function =
+            &functions.items[function_index];
 
-        if (!is_executable_section(section))
+        uint32_t begin =
+            function->begin_address;
+
+        uint32_t end =
+            function->end_address;
+
+        uint32_t size =
+            end - begin;
+
+        if (size == 0)
             continue;
 
-        if (section->size_of_raw_data == 0)
-            continue;
-
-        uint8_t *buffer =
-            malloc(section->size_of_raw_data);
-
-        if (!buffer) {
-            fprintf(stderr,
-                    "Error: failed to allocate section buffer\n");
+        if (!is_executable_rva(sections,
+                               coff->number_of_sections,
+                               begin)) {
             continue;
         }
 
-        if (fseek(file,
-                  section->pointer_to_raw_data,
-                  SEEK_SET) != 0) {
+        uint32_t file_offset =
+            pe_rva_to_file_offset(file,
+                                  coff,
+                                  pe_offset,
+                                  begin);
 
-            fprintf(stderr,
-                    "Error: failed to seek to section data\n");
+        if (file_offset == 0)
+            continue;
 
+        uint32_t end_offset =
+            pe_rva_to_file_offset(file,
+                                  coff,
+                                  pe_offset,
+                                  end - 1);
+
+        if (end_offset == 0)
+            continue;
+
+        size_t bytes_available =
+            (size_t)(end_offset - file_offset) + 1;
+
+        if (bytes_available < size)
+            size = (uint32_t)bytes_available;
+
+        uint8_t *buffer =
+            malloc(size);
+
+        if (!buffer)
+            continue;
+
+        if (fseek(file, file_offset, SEEK_SET) != 0) {
             free(buffer);
             continue;
         }
 
         if (fread(buffer,
                   1,
-                  section->size_of_raw_data,
-                  file) != section->size_of_raw_data) {
-
-            fprintf(stderr,
-                    "Error: failed to read section data\n");
+                  size,
+                  file) != size) {
 
             free(buffer);
             continue;
@@ -153,8 +205,8 @@ void pe_find_calls(FILE *file,
         size_t count =
             cs_disasm(handle,
                       buffer,
-                      section->size_of_raw_data,
-                      section->virtual_address,
+                      size,
+                      begin,
                       0,
                       &insn);
 
@@ -177,9 +229,9 @@ void pe_find_calls(FILE *file,
                  displayed_calls < limit);
 
             /*
-             * Direct CALL:
+             * Direct CALL rel32:
              *
-             * E8 rel32
+             * E8 xx xx xx xx
              */
             if (insn[j].size >= 5 &&
                 insn[j].bytes[0] == 0xE8) {
@@ -211,8 +263,14 @@ void pe_find_calls(FILE *file,
 
                 if (should_display) {
 
-                    printf("    0x%08llX  CALL  -> 0x%08llX  "
-                           "[direct] [%s]\n",
+                    printf("    Function %zu  "
+                           "0x%08X-0x%08X\n",
+                           function_index,
+                           begin,
+                           end);
+
+                    printf("      0x%08llX  CALL -> "
+                           "0x%08llX  [direct] [%s]\n",
                            (unsigned long long)insn[j].address,
                            (unsigned long long)target,
                            valid_target ? "exec" : "invalid");
@@ -220,18 +278,19 @@ void pe_find_calls(FILE *file,
                     displayed_calls++;
                 }
             }
-
-            /*
-             * All other CALL forms are currently treated
-             * as indirect.
-             */
             else {
 
                 indirect_calls++;
 
                 if (should_display) {
 
-                    printf("    0x%08llX  CALL  -> %s  "
+                    printf("    Function %zu  "
+                           "0x%08X-0x%08X\n",
+                           function_index,
+                           begin,
+                           end);
+
+                    printf("      0x%08llX  CALL -> %s  "
                            "[indirect]\n",
                            (unsigned long long)insn[j].address,
                            insn[j].op_str);
@@ -245,10 +304,10 @@ void pe_find_calls(FILE *file,
         free(buffer);
     }
 
-    free(sections);
-    cs_close(&handle);
+    printf("\n    [+] Functions analyzed:     %zu\n",
+           functions.count);
 
-    printf("\n    [+] Total CALL instructions: %zu\n",
+    printf("    [+] Total CALL instructions: %zu\n",
            total_calls);
 
     printf("    [+] Direct CALLs:            %zu\n",
@@ -266,4 +325,8 @@ void pe_find_calls(FILE *file,
     printf("    [+] Displayed CALLs:         %zu / %zu\n",
            displayed_calls,
            total_calls);
+
+    free(sections);
+    pe_free_functions(&functions);
+    cs_close(&handle);
 }

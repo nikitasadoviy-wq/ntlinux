@@ -1,4 +1,4 @@
-#include <stdio.h>
+﻿#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -324,9 +324,20 @@ int main(int argc, char *argv[])
     }
 
     if (show_functions) {
-        pe_print_functions(file,
-                           &coff,
-                           dos.e_lfanew);
+        FunctionTable function_table;
+
+        if (pe_load_functions(file,
+            &coff,
+            dos.e_lfanew,
+            &function_table)) {
+
+            pe_print_functions(&function_table);
+        pe_free_functions(&function_table);
+
+            } else {
+                printf("\n[+] Functions:\n");
+                printf("    [-] Failed to load .pdata\n");
+            }
     }
 
     if (show_disasm) {
