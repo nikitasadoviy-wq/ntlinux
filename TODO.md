@@ -1,4 +1,3 @@
-```md
 # ntlinux TODO
 
 ## ntinspect
@@ -49,10 +48,10 @@
 - [x] Calculate direct targets
 - [x] Validate direct targets
 - [x] Detect indirect CALLs
-- [ ] Distinguish indirect CALL forms
-- [ ] Resolve RIP-relative CALLs
-- [ ] Resolve IAT slots
-- [ ] Map IAT entries to imported DLL/function
+- [x] Resolve RIP-relative CALLs
+- [x] Resolve IAT slots
+- [x] Map IAT entries to imported DLL/function
+- [ ] Distinguish indirect CALL forms (`call reg` vs `call [reg]` vs `call [rip+disp]` — currently only the RIP-relative form is classified/resolved, others just fall into generic `[indirect]`)
 - [ ] Build function-to-function references
 - [ ] Build function-to-API references
 
